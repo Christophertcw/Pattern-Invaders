@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PATTERN INVADERS</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#000; display:flex; justify-content:center; align-items:center; min-height:100vh; overflow:hidden; }
+canvas {
+  display:block;
+  max-width: 100vw;
+  max-height: 96vh;
+  width: auto;
+  height: auto;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 560, H = 620;
+canvas.width = W;
+canvas.height = H;
+
+const S = 3;
+
+// ── GREEN CREEPER — Frame 1 (Image 2)
+// Reading the block grid carefully row by row (8 cols x 8 rows):
+// Top-right single block, then left arm + body + right stacks
+const GREEN_F1 = [
+  [0,0,0,0,0,0,1,0],  // top-right block
+  [0,0,1,1,0,0,1,0],  // two blocks top
+  [1,1,0,1,1,0,0,0],  // left arm row1
+  [1,1,0,1,1,0,1,0],  // left arm row2 + right col1
+  [0,0,1,1,0,0,1,0],  // right col2
+  [0,0,1,1,0,0,0,0],  // body
+  [0,0,1,1,0,0,0,0],  // body
+  [0,0,1,1,0,1,0,0],  // body + bottom right
+];
+
+// ── GREEN CREEPER — Frame 2 (Image 3)
+const GREEN_F2 = [
+  [0,0,1,1,0,0,0,0,1,0],  // two top blocks + far right
+  [0,1,1,0,0,1,1,0,0,0],  // left + center-right
+  [1,1,0,0,1,0,0,1,1,0],  // left arm + gaps + right arm
+  [0,0,0,0,1,0,0,0,0,0],  // center
+  [0,0,0,0,1,1,0,0,0,0],  // center
+  [0,0,0,0,1,1,0,0,0,0],  // center
+  [0,0,0,0,1,1,0,0,0,0],  // center
+  [0,0,0,1,1,0,0,0,0,0],  // bottom
+];
+
+// ── RED CORRUPTED — (Image 1) big block "eyes" pattern
+// Left side: tall rectangle (2 wide x 3 tall) at col 0
+// Then gap, then 2x2 block, then gap, then big right cluster
+const RED_F1 = [
+  [1,0,0,1,0,1,0,0],  // left col top, center top, right top
+  [1,0,0,1,1,0,1,1],  // left col, center 2x, right 2x
+  [1,0,0,0,0,0,1,1],  // left col, right 2x
+  [0,0,1,1,0,0,0,0],  // bottom left cluster
+  [0,0,1,1,0,0,0,0],  // bottom left cluster
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+];
+
+const RED_F2 = [
+  [0,1,0,0,1,0,1,0],
+  [1,1,0,1,1,1,0,1],
+  [1,0,0,0,1,0,1,1],
+  [0,1,1,0,0,0,0,0],
+  [0,0,1,1,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0],
+];
+
+// ── WHITE GHOST/SKULL — UFO (new image)
+// 6x6 grid reading from the photo: wide top, hollow centre, bottom jaw
+const UFO_F1 = [
+  [0,1,1,1,1,0],
+  [1,0,1,0,1,1],
+  [1,0,0,0,0,1],
+  [0,1,0,1,0,0],
+  [0,1,0,0,1,0],
+  [0,0,1,1,0,0],
+];
+const UFO_F2 = [
+  [0,1,1,1,1,0],
+  [1,1,0,1,0,1],
+  [1,0,0,0,0,1],
+  [0,0,1,0,1,0],
+  [0,1,0,0,1,0],
+  [0,0,1,1,0,0],
+];
+const SHIP = [
+  [0,0,0,1,1,0,0,0],
+  [0,0,0,1,1,0,0,0],
+  [0,1,1,1,1,1,1,0],
+  [1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1],
+  [0,1,1,1,1,1,1,0],
+  [0,0,0,1,1,0,0,0],
+  [0,0,0,1,1,0,0,0],
+];
+
+function sprW(spr){ return spr[0].length * S; }
+function sprH(spr){ return spr.length * S; }
+
+function drawSpr(spr, x, y, color, ps) {
+  ps = ps || S;
+  ctx.fillStyle = color;
+  for(let r=0;r<spr.length;r++)
+    for(let c=0;c<spr[r].length;c++)
+      if(spr[r][c]) ctx.fillRect(x+c*ps, y+r*ps, ps-1, ps-1);
+}
+
+function drawSprGlow(spr, x, y, color, glow, ps) {
+  ctx.shadowColor = glow;
+  ctx.shadowBlur = 16;
+  drawSpr(spr, x, y, color, ps);
+  ctx.shadowBlur = 0;
+}
+
+// ── CONSTANTS ──────────────────────────────────────────────────
+const PW = sprW(SHIP);
+const PH = sprH(SHIP);
+const EW = 10 * S;  // enemy width
+const EH = 8  * S;  // enemy height
+const PLAYER_Y = H - 90;
+
+// ── STATE ──────────────────────────────────────────────────────
+let score=0, hi=0, lives=3, wave=1;
+let state = 'title';
+let tick = 0;
+
+let px = W/2 - PW/2;
+let iframes = 0;
+let pBullets = [];
+let eBullets = [];
+let enemies  = [];
+let sparks   = [];
+let eDir=1, eMoveT=0, eFireT=0;
+
+// UFO
+let ufo = { active:false, x:0, y:28, dir:1, timer:0 };
+const UFO_W = 6*S*2; // drawn at 2x scale
+const UFO_H = 6*S*2;
+const UFO_PTS = [50,100,150,200,300];
+let ufoMsg = null; // {text, x, y, life}
+
+const COLS=10, ROWS=5;
+const GAP_X=4, GAP_Y=4;
+
+function spawnEnemies(){
+  enemies=[];
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const isRed = r < 2;
+      enemies.push({
+        x: 10 + c*(EW+GAP_X),
+        y: 40 + r*(EH+GAP_Y),
+        alive:true, isRed,
+        anim:0,
+        pts: isRed ? 20 : 10,
+      });
+    }
+  }
+  eDir=1; eMoveT=0; eFireT=0;
+  pBullets=[]; eBullets=[]; sparks=[];
+  ufo={active:false, x:0, y:28, dir:1, timer:0}; ufoMsg=null;
+}
+
+function resetPlayer(){ px=W/2-PW/2; iframes=0; }
+
+function startGame(){
+  score=0; lives=3; wave=1;
+  spawnEnemies(); resetPlayer();
+  state='playing';
+}
+
+// ── INPUT ──────────────────────────────────────────────────────
+const keys={};
+let lastShot=0;
+window.addEventListener('keydown', e=>{
+  if(['Space','ArrowLeft','ArrowRight','KeyA','KeyD'].includes(e.code)) e.preventDefault();
+  if(!keys[e.code]){
+    if(e.code==='Space'){
+      if(state==='title'||state==='over'){ startGame(); return; }
+      const now=Date.now();
+      if(now-lastShot>420){ lastShot=now; pBullets.push({x:px+PW/2-2, y:PLAYER_Y}); }
+    }
+  }
+  keys[e.code]=true;
+});
+window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+// ── UPDATE ─────────────────────────────────────────────────────
+function update(){
+  tick++;
+  if(state!=='playing') return;
+
+  // Player move
+  if(iframes>0) iframes--;
+  if((keys['ArrowLeft']||keys['KeyA']) && px>0)      px-=5;
+  if((keys['ArrowRight']||keys['KeyD']) && px<W-PW)  px+=5;
+
+  const alive = enemies.filter(e=>e.alive);
+  if(!alive.length){ wave++; spawnEnemies(); return; }
+
+  // Animate
+  alive.forEach(e=>{ e.anim=Math.floor(tick/30)%2; });
+
+  // Move enemies
+  const spd = Math.max(3, 58 - alive.length*0.5 - wave*2);
+  eMoveT++;
+  if(eMoveT>=spd){
+    eMoveT=0;
+    let edge=false;
+    alive.forEach(e=>{ e.x+=eDir*(5+wave); if(e.x<5||e.x+EW>W-5) edge=true; });
+    if(edge){ eDir*=-1; alive.forEach(e=>{ e.y+=16; }); }
+  }
+
+  // Overrun?
+  if(alive.some(e=>e.y+EH>=PLAYER_Y)){ endGame(); return; }
+
+  // Enemy fire
+  eFireT++;
+  const fr=Math.max(20,75-wave*6);
+  if(eFireT>=fr){
+    eFireT=0;
+    const s=alive[Math.floor(Math.random()*alive.length)];
+    eBullets.push({x:s.x+EW/2-2, y:s.y+EH, red:s.isRed});
+  }
+
+  // Player bullets
+  for(let i=pBullets.length-1;i>=0;i--){
+    pBullets[i].y-=10;
+    if(pBullets[i].y<0){ pBullets.splice(i,1); continue; }
+    let hit=false;
+    for(let j=enemies.length-1;j>=0;j--){
+      const e=enemies[j]; if(!e.alive) continue;
+      const b=pBullets[i];
+      if(b.x>e.x&&b.x<e.x+EW&&b.y>e.y&&b.y<e.y+EH){
+        e.alive=false; score+=e.pts; if(score>hi)hi=score;
+        addSpark(e.x+EW/2, e.y+EH/2, e.isRed?'#ff4433':'#00ff88');
+        pBullets.splice(i,1); hit=true; break;
+      }
+    }
+    if(hit) continue;
+  }
+
+  // Enemy bullets
+  for(let i=eBullets.length-1;i>=0;i--){
+    const b=eBullets[i]; b.y+=5+wave*0.3;
+    if(b.y>H){ eBullets.splice(i,1); continue; }
+    if(iframes===0&&b.x>px&&b.x<px+PW&&b.y>PLAYER_Y&&b.y<PLAYER_Y+PH){
+      lives--; iframes=110;
+      addSpark(px+PW/2, PLAYER_Y+PH/2,'#ffee00');
+      eBullets.splice(i,1);
+      if(lives<=0){ endGame(); return; }
+    }
+  }
+
+  // Sparks
+  sparks.forEach(s=>{ s.life--; s.parts.forEach(p=>{p.x+=p.dx;p.y+=p.dy;}); });
+  sparks=sparks.filter(s=>s.life>0);
+
+  // UFO
+  ufo.timer++;
+  if(!ufo.active && ufo.timer > 600){
+    ufo.timer=0; ufo.active=true;
+    ufo.dir = Math.random()<0.5 ? 1 : -1;
+    ufo.x = ufo.dir===1 ? -UFO_W : W+UFO_W;
+  }
+  if(ufo.active){
+    ufo.x += ufo.dir * 2;
+    if(ufo.x > W+UFO_W || ufo.x < -UFO_W) ufo.active=false;
+    // Hit by player bullet?
+    for(let i=pBullets.length-1;i>=0;i--){
+      const b=pBullets[i];
+      if(b.x>ufo.x && b.x<ufo.x+UFO_W && b.y>ufo.y && b.y<ufo.y+UFO_H){
+        const pts=UFO_PTS[Math.floor(Math.random()*UFO_PTS.length)];
+        score+=pts; if(score>hi)hi=score;
+        ufoMsg={text:'+'+pts, x:ufo.x+UFO_W/2, y:ufo.y, life:60};
+        addSpark(ufo.x+UFO_W/2, ufo.y+UFO_H/2,'#ccccff');
+        ufo.active=false;
+        pBullets.splice(i,1); break;
+      }
+    }
+  }
+  if(ufoMsg){ ufoMsg.life--; ufoMsg.y-=0.5; if(ufoMsg.life<=0)ufoMsg=null; }
+}
+
+function addSpark(cx,cy,color){
+  const parts=[];
+  for(let i=0;i<16;i++){
+    const a=(Math.PI*2*i)/16, sp=1.5+Math.random()*4;
+    parts.push({x:0,y:0,dx:Math.cos(a)*sp,dy:Math.sin(a)*sp});
+  }
+  sparks.push({cx,cy,color,life:24,max:24,parts});
+}
+
+function endGame(){ state='over'; }
+
+// ── DRAW ───────────────────────────────────────────────────────
+function draw(){
+  ctx.fillStyle='#000a00';
+  ctx.fillRect(0,0,W,H);
+
+  // Scanlines
+  for(let y=0;y<H;y+=3){ ctx.fillStyle='rgba(0,0,0,0.15)'; ctx.fillRect(0,y,W,1); }
+
+  // HUD
+  ctx.shadowColor='#00ff50'; ctx.shadowBlur=8;
+  ctx.fillStyle='#00ff50'; ctx.font='bold 14px monospace';
+  ctx.textAlign='left';  ctx.fillText('SCORE<1> '+String(score).padStart(4,'0'), 8, 20);
+  ctx.textAlign='center';ctx.fillText('HI-SCORE '+String(hi).padStart(4,'0'), W/2, 20);
+  ctx.textAlign='right'; ctx.fillText('SCORE<2> 0000', W-8, 20);
+  ctx.shadowBlur=0;
+
+  // Ground
+  ctx.strokeStyle='#00cc44'; ctx.lineWidth=2;
+  ctx.shadowColor='#00ff44'; ctx.shadowBlur=6;
+  ctx.beginPath(); ctx.moveTo(0,H-50); ctx.lineTo(W,H-50); ctx.stroke();
+  ctx.shadowBlur=0;
+
+  // Lives row
+  ctx.fillStyle='#00cc44'; ctx.font='14px monospace'; ctx.textAlign='left';
+  ctx.fillText(String(lives), 8, H-18);
+  for(let i=0;i<lives;i++) drawSpr(SHIP, 24+i*(PW+4), H-44, '#ffee00', 2);
+  ctx.textAlign='right'; ctx.fillText('CREDIT 00', W-8, H-18);
+
+  // ── TITLE ──────────────────────────────────────────────────
+  if(state==='title'){
+    ctx.fillStyle='rgba(0,10,0,0.9)'; ctx.fillRect(0,38,W,H-88);
+    ctx.fillStyle='#00ff50'; ctx.font='bold 38px monospace'; ctx.textAlign='center';
+    ctx.shadowColor='#00ff50'; ctx.shadowBlur=18;
+    ctx.fillText('PATTERN INVADERS', W/2, 100); ctx.shadowBlur=0;
+
+    ctx.fillStyle='#00aa44'; ctx.font='18px monospace';
+    ctx.fillText('— SCORE ADVANCE TABLE —', W/2, 140);
+
+    // Show enemy sprites
+    drawSprGlow(RED_F1,   W/2-200, 160, '#ff4433','#ff1100', S);
+    ctx.fillStyle='#ff4433'; ctx.textAlign='left'; ctx.font='20px monospace';
+    ctx.fillText('= 20 PTS', W/2-200+EW+12, 160+EH/2+6);
+
+    drawSprGlow(GREEN_F1, W/2-200, 250, '#00ff88','#00ffaa', S);
+    ctx.fillStyle='#00ff88';
+    ctx.fillText('= 10 PTS', W/2-200+EW+12, 250+EH/2+6);
+
+    drawSprGlow(UFO_F1, W/2-200, 330, '#ccccff','#8888ff', S*2);
+    ctx.fillStyle='#ccccff';
+    ctx.fillText('= ??? PTS', W/2-200+UFO_W+12, 330+UFO_H/2+6);
+
+    // Ship preview
+    ctx.shadowColor='#ffaa00'; ctx.shadowBlur=18;
+    drawSpr(SHIP, W/2-PW/2, 390, '#ffee00');
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#ffee00'; ctx.textAlign='center'; ctx.font='20px monospace';
+    ctx.fillText('= YOUR SHIP', W/2, 395+PH+16);
+
+    ctx.fillStyle='#006622'; ctx.font='15px monospace';
+    ctx.fillText('← →  MOVE          SPACE  FIRE', W/2, 460);
+
+    if(Math.floor(tick/28)%2===0){
+      ctx.fillStyle='#00ff50'; ctx.font='24px monospace';
+      ctx.shadowColor='#00ff50'; ctx.shadowBlur=10;
+      ctx.fillText('PRESS SPACE TO PLAY', W/2, 510);
+      ctx.shadowBlur=0;
+    }
+    return;
+  }
+
+  // ── ENEMIES ────────────────────────────────────────────────
+  enemies.forEach(e=>{
+    if(!e.alive) return;
+    if(e.isRed){
+      const spr = e.anim===0 ? RED_F1 : RED_F2;
+      drawSprGlow(spr, e.x, e.y, '#ff4433','#ff1100', S);
+    } else {
+      const spr = e.anim===0 ? GREEN_F1 : GREEN_F2;
+      drawSprGlow(spr, e.x, e.y, '#00ff88','#00ffaa', S);
+    }
+  });
+
+  // ── UFO ────────────────────────────────────────────────────
+  if(ufo.active){
+    const uspr = Math.floor(tick/20)%2===0 ? UFO_F1 : UFO_F2;
+    drawSprGlow(uspr, ufo.x, ufo.y, '#ccccff','#8888ff', S*2);
+  }
+  if(ufoMsg){
+    const t=ufoMsg.life/60;
+    ctx.globalAlpha=t;
+    ctx.fillStyle='#ffffff'; ctx.font='bold 14px monospace'; ctx.textAlign='center';
+    ctx.shadowColor='#aaaaff'; ctx.shadowBlur=10;
+    ctx.fillText(ufoMsg.text, ufoMsg.x, ufoMsg.y);
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+  }
+
+  // ── PLAYER — always drawn, bright yellow, on top ────────────
+  const show = state==='playing' && (iframes===0 || Math.floor(tick/5)%2===0);
+  if(show){
+    ctx.shadowColor='#ffff00';
+    ctx.shadowBlur=22;
+    drawSpr(SHIP, px, PLAYER_Y, '#ffee00');
+    ctx.shadowBlur=0;
+  }
+
+  // Player bullets — bright white tall bar
+  ctx.fillStyle='#ffffff';
+  ctx.shadowColor='#ccffcc'; ctx.shadowBlur=10;
+  pBullets.forEach(b=>ctx.fillRect(b.x, b.y, 4, 18));
+  ctx.shadowBlur=0;
+
+  // Enemy bullets — zigzag
+  eBullets.forEach(b=>{
+    const col=b.red?'#ff5533':'#00ff88';
+    ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=8;
+    const zz=Math.floor(b.y/6)%2===0?0:3;
+    ctx.fillRect(b.x+zz, b.y, 3, 10);
+    ctx.shadowBlur=0;
+  });
+
+  // Sparks
+  sparks.forEach(sp=>{
+    const t=sp.life/sp.max;
+    ctx.globalAlpha=t; ctx.fillStyle=sp.color;
+    ctx.shadowColor=sp.color; ctx.shadowBlur=12;
+    sp.parts.forEach(p=>ctx.fillRect(sp.cx+p.x-2,sp.cy+p.y-2,4,4));
+    ctx.globalAlpha=1; ctx.shadowBlur=0;
+  });
+
+  // Wave banner
+  if(tick<90){
+    ctx.fillStyle='#00ff50'; ctx.textAlign='center'; ctx.font='28px monospace';
+    ctx.shadowColor='#00ff50'; ctx.shadowBlur=12;
+    ctx.fillText('WAVE '+wave, W/2, H/2);
+    ctx.shadowBlur=0;
+  }
+
+  // ── GAME OVER ──────────────────────────────────────────────
+  if(state==='over'){
+    ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#ff3333'; ctx.textAlign='center'; ctx.font='bold 50px monospace';
+    ctx.shadowColor='#ff0000'; ctx.shadowBlur=24;
+    ctx.fillText('GAME OVER', W/2, H/2-30); ctx.shadowBlur=0;
+    ctx.fillStyle='#00ff50'; ctx.font='26px monospace';
+    ctx.fillText('SCORE: '+String(score).padStart(4,'0'), W/2, H/2+24);
+    if(Math.floor(tick/30)%2===0){
+      ctx.fillStyle='#ff9999'; ctx.font='20px monospace';
+      ctx.fillText('PRESS SPACE TO RETRY', W/2, H/2+70);
+    }
+  }
+}
+
+function loop(){
+  update(); draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
