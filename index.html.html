@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PATTERN INVADERS</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#000; display:flex; justify-content:center; align-items:center; min-height:100vh; overflow:hidden; }
+canvas {
+  display:block;
+  max-width:100vw;
+  max-height:78vh;
+  width:auto;
+  height:auto;
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 660, H = 680;
+canvas.width = W;
+canvas.height = H;
+
+// ── BLOCK SIZE ─────────────────────────────────────────────────
+// All sprites use large square blocks like the NFT collection
+// B = size of each block in pixels (with 1px gap = B-1 filled)
+const B = 7;  // block size — matches the big chunky look in the photos
+
+// ── SPRITE DEFINITIONS (1=block on, 0=empty) ──────────────────
+// Each sprite is drawn as large glowing squares exactly like patternretrieval.app
+
+// GREEN $ — enemy row 1 (bottom 3 rows) — 7x8 grid
+const SPR_DOLLAR_A = [
+  [0,0,1,1,1,0,0],
+  [0,1,0,0,0,1,0],
+  [0,1,0,0,0,0,0],
+  [0,0,1,1,1,0,0],
+  [0,0,0,0,0,1,0],
+  [0,1,0,0,0,1,0],
+  [0,0,1,1,1,0,0],
+  [0,0,0,1,0,0,0],
+];
+const SPR_DOLLAR_B = [
+  [0,0,0,1,0,0,0],
+  [0,0,1,1,1,0,0],
+  [0,1,0,0,0,1,0],
+  [0,1,0,0,0,0,0],
+  [0,0,1,1,1,0,0],
+  [0,0,0,0,0,1,0],
+  [0,1,0,0,0,1,0],
+  [0,0,1,1,1,0,0],
+];
+
+// RED % — enemy row 2 (top 2 rows) — 7x8 grid
+const SPR_PERCENT_A = [
+  [1,1,0,0,0,1,0],
+  [1,1,0,0,1,0,0],
+  [0,0,0,1,0,0,0],
+  [0,0,1,0,0,0,0],
+  [0,1,0,0,1,1,0],
+  [1,0,0,0,1,1,0],
+  [0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0],
+];
+const SPR_PERCENT_B = [
+  [0,1,1,0,0,0,1],
+  [0,1,1,0,0,1,0],
+  [0,0,0,0,1,0,0],
+  [0,0,0,1,0,0,0],
+  [0,0,1,0,1,1,0],
+  [0,1,0,0,1,1,0],
+  [0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0],
+];
+
+// PURPLE ? — UFO mystery ship — 6x7 grid
+const SPR_QUESTION_A = [
+  [0,1,1,1,0,0],
+  [1,0,0,0,1,0],
+  [0,0,0,1,0,0],
+  [0,0,1,0,0,0],
+  [0,0,1,0,0,0],
+  [0,0,0,0,0,0],
+  [0,0,1,0,0,0],
+];
+const SPR_QUESTION_B = [
+  [0,1,1,1,0,0],
+  [1,0,0,0,1,0],
+  [0,0,0,1,0,0],
+  [0,0,1,1,0,0],
+  [0,0,1,0,0,0],
+  [0,0,0,0,0,0],
+  [0,0,1,0,0,0],
+];
+
+const SPR_SHIP = [
+  [1,0,1,0,1],
+  [0,1,0,1,0],
+  [0,0,1,0,0],
+  [0,1,0,1,0],
+  [1,0,1,0,1],
+];
+
+// PURPLE 4 — wave 2 bottom enemy
+const SPR_FOUR_A = [
+  [0,0,1,0,1,0],
+  [0,0,1,0,1,0],
+  [0,1,0,0,1,0],
+  [1,1,1,1,1,0],
+  [0,0,0,0,1,0],
+  [0,0,0,0,1,0],
+  [0,0,0,0,0,0],
+  [0,0,0,0,0,0],
+];
+const SPR_FOUR_B = [
+  [0,0,1,0,1,0],
+  [0,1,0,0,1,0],
+  [0,1,0,0,1,0],
+  [1,1,1,1,1,0],
+  [0,0,0,0,1,0],
+  [0,0,0,0,1,0],
+  [0,0,0,0,0,0],
+  [0,0,0,0,0,0],
+];
+
+// PURPLE 7 — wave 2 top enemy
+const SPR_SEVEN_A = [
+  [1,1,1,1,1,0],
+  [0,0,0,0,1,0],
+  [0,0,0,1,0,0],
+  [0,0,1,0,0,0],
+  [0,1,0,0,0,0],
+  [0,1,0,0,0,0],
+  [0,1,0,0,0,0],
+  [0,0,0,0,0,0],
+];
+const SPR_SEVEN_B = [
+  [1,1,1,1,1,0],
+  [0,0,0,1,0,0],
+  [0,0,1,0,0,0],
+  [0,0,1,0,0,0],
+  [0,1,0,0,0,0],
+  [0,1,0,0,0,0],
+  [0,0,0,0,0,0],
+  [0,0,0,0,0,0],
+];
+
+// ORANGE N — wave 3 top enemy
+const SPR_N_A = [
+  [1,0,0,0,1],
+  [1,1,0,0,1],
+  [1,0,1,0,1],
+  [1,0,0,1,1],
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [0,0,0,0,0],
+];
+const SPR_N_B = [
+  [1,0,0,0,1],
+  [1,1,0,0,1],
+  [1,1,0,0,1],
+  [1,0,1,0,1],
+  [1,0,0,1,1],
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [0,0,0,0,0],
+];
+
+// ORANGE W — wave 3 bottom enemy
+const SPR_W_A = [
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [1,0,1,0,1],
+  [1,0,1,0,1],
+  [1,1,0,1,1],
+  [0,1,0,1,0],
+  [0,0,0,0,0],
+];
+const SPR_W_B = [
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [1,0,1,0,1],
+  [1,1,0,1,1],
+  [0,1,0,1,0],
+  [0,0,0,0,0],
+];
+
+// WHITE B — wave 4 top enemy
+const SPR_B_A = [
+  [1,1,1,0,0],
+  [1,0,0,1,0],
+  [1,0,0,1,0],
+  [1,1,1,0,0],
+  [1,0,0,1,0],
+  [1,0,0,1,0],
+  [1,1,1,0,0],
+  [0,0,0,0,0],
+];
+const SPR_B_B = [
+  [1,1,1,1,0],
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [1,1,1,1,0],
+  [1,0,0,0,1],
+  [1,0,0,0,1],
+  [1,1,1,1,0],
+  [0,0,0,0,0],
+];
+
+// WHITE 8 — wave 4 bottom enemy
+const SPR_8_A = [
+  [0,1,1,0],
+  [1,0,0,1],
+  [1,0,0,1],
+  [0,1,1,0],
+  [1,0,0,1],
+  [1,0,0,1],
+  [0,1,1,0],
+  [0,0,0,0],
+];
+const SPR_8_B = [
+  [0,1,1,1],
+  [1,0,0,0],
+  [1,0,0,1],
+  [0,1,1,0],
+  [1,0,0,1],
+  [0,0,0,1],
+  [1,1,1,0],
+  [0,0,0,0],
+];
+
+function sprW(spr){ return spr[0].length * B; }
+function sprH(spr){ return spr.length * B; }
+
+function drawSpr(spr, x, y, color, b) {
+  b = b || B;
+  ctx.fillStyle = color;
+  for(let r=0;r<spr.length;r++)
+    for(let c=0;c<spr[r].length;c++)
+      if(spr[r][c]) ctx.fillRect(x+c*b, y+r*b, b-1, b-1);
+}
+
+function drawGlow(spr, x, y, color, glowCol, b) {
+  b = b || B;
+  ctx.shadowColor = glowCol;
+  ctx.shadowBlur = 18;
+  drawSpr(spr, x, y, color, b);
+  ctx.shadowBlur = 0;
+}
+
+// ── SIZES ──────────────────────────────────────────────────────
+const EW = sprW(SPR_DOLLAR_A);   // 7*B
+const EH = sprH(SPR_DOLLAR_A);   // 8*B
+const PW = sprW(SPR_SHIP);       // 5*B
+const PH = sprH(SPR_SHIP);       // 5*B
+const UFO_B = B+2;
+const UFO_W = sprW(SPR_QUESTION_A) * UFO_B / B;
+const UFO_H = sprH(SPR_QUESTION_A) * UFO_B / B;
+
+const PLAYER_Y = H - 95;
+
+// ── GAME STATE ─────────────────────────────────────────────────
+let score=0, hi=0, lives=3, wave=1;
+let state = 'title';
+let tick = 0;
+
+let px = W/2 - PW/2;
+let iframes = 0;
+let pBullets = [], eBullets = [], enemies = [], sparks = [];
+let eDir=1, eMoveT=0, eFireT=0;
+let ufo = {active:false, x:0, y:32, dir:1, timer:0};
+let ufoMsg = null;
+const UFO_PTS = [50,100,150,200,300];
+
+const COLS=9, ROWS=5;
+const GAP_X=5, GAP_Y=6;
+
+function spawnEnemies(){
+  enemies=[];
+  const startX = (W - (COLS*(EW+GAP_X) - GAP_X)) / 2;
+
+  // Wave 1: green $ + red %   Wave 2+: purple 4 + purple 7
+  const useWave = wave >= 4 ? 4 : wave >= 3 ? 3 : wave >= 2 ? 2 : 1;
+
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const isTop = r < 2;
+      enemies.push({
+        x: startX + c*(EW+GAP_X),
+        y: 48 + r*(EH+GAP_Y),
+        alive:true, isTop,
+        wave: useWave,
+        anim:0,
+        pts: isTop ? 20 : 10,
+      });
+    }
+  }
+  eDir=1; eMoveT=0; eFireT=0;
+  pBullets=[]; eBullets=[]; sparks=[];
+  ufo={active:false,x:0,y:32,dir:1,timer:0}; ufoMsg=null;
+}
+
+function resetPlayer(){ px=W/2-PW/2; iframes=0; }
+
+function startGame(){
+  score=0; lives=3; wave=1;
+  spawnEnemies(); resetPlayer();
+  state='playing';
+}
+
+// ── INPUT ──────────────────────────────────────────────────────
+const keys={};
+let lastShot=0;
+window.addEventListener('keydown', e=>{
+  if(['Space','ArrowLeft','ArrowRight','KeyA','KeyD'].includes(e.code)) e.preventDefault();
+  if(!keys[e.code]){
+    if(e.code==='Space'){
+      if(state==='title'||state==='over'){ startGame(); return; }
+      const now=Date.now();
+      if(now-lastShot>420){
+        lastShot=now;
+        pBullets.push({x:px+PW/2-2, y:PLAYER_Y-4});
+      }
+    }
+  }
+  keys[e.code]=true;
+});
+window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+// ── UPDATE ─────────────────────────────────────────────────────
+function update(){
+  tick++;
+  if(state!=='playing') return;
+
+  if(iframes>0) iframes--;
+  if((keys['ArrowLeft']||keys['KeyA'])  && px>0)     px-=5;
+  if((keys['ArrowRight']||keys['KeyD']) && px<W-PW)  px+=5;
+
+  const alive = enemies.filter(e=>e.alive);
+  if(!alive.length){ wave++; spawnEnemies(); return; }
+
+  alive.forEach(e=>{ e.anim=Math.floor(tick/32)%2; });
+
+  // Enemy step movement
+  const spd = Math.max(3, 60 - alive.length*0.6 - wave*2);
+  eMoveT++;
+  if(eMoveT>=spd){
+    eMoveT=0;
+    let edge=false;
+    alive.forEach(e=>{
+      e.x += eDir*(4+wave);
+      if(e.x<4||e.x+EW>W-4) edge=true;
+    });
+    if(edge){ eDir*=-1; alive.forEach(e=>{ e.y+=14; }); }
+  }
+
+  if(alive.some(e=>e.y+EH>=PLAYER_Y)){ endGame(); return; }
+
+  // Enemy fire
+  eFireT++;
+  const fr=Math.max(22,80-wave*7);
+  if(eFireT>=fr){
+    eFireT=0;
+    const s=alive[Math.floor(Math.random()*alive.length)];
+    eBullets.push({x:s.x+EW/2-2, y:s.y+EH, isTop:s.isTop, waveNum:s.wave});
+  }
+
+  // Player bullets
+  for(let i=pBullets.length-1;i>=0;i--){
+    pBullets[i].y-=11;
+    if(pBullets[i].y<0){ pBullets.splice(i,1); continue; }
+    let hit=false;
+    for(let j=enemies.length-1;j>=0;j--){
+      const e=enemies[j]; if(!e.alive) continue;
+      const b=pBullets[i];
+      if(b.x>e.x&&b.x<e.x+EW&&b.y>e.y&&b.y<e.y+EH){
+        e.alive=false; score+=e.pts; if(score>hi)hi=score;
+        addSpark(e.x+EW/2, e.y+EH/2, e.isTop?'#ff4433':'#44ff88');
+        pBullets.splice(i,1); hit=true; break;
+      }
+    }
+    if(hit) continue;
+  }
+
+  // Enemy bullets
+  for(let i=eBullets.length-1;i>=0;i--){
+    const b=eBullets[i];
+    b.y+=5+wave*0.3;
+    if(b.y>H){ eBullets.splice(i,1); continue; }
+    if(iframes===0&&b.x>px&&b.x<px+PW&&b.y>PLAYER_Y&&b.y<PLAYER_Y+PH){
+      lives--; iframes=110;
+      addSpark(px+PW/2, PLAYER_Y+PH/2,'#ffee00');
+      eBullets.splice(i,1);
+      if(lives<=0){ endGame(); return; }
+    }
+  }
+
+  // Sparks
+  sparks.forEach(s=>{ s.life--; s.parts.forEach(p=>{p.x+=p.dx;p.y+=p.dy;}); });
+  sparks=sparks.filter(s=>s.life>0);
+
+  // UFO
+  ufo.timer++;
+  if(!ufo.active && ufo.timer>500){
+    ufo.timer=0; ufo.active=true;
+    ufo.dir=Math.random()<0.5?1:-1;
+    ufo.x=ufo.dir===1?-UFO_W:W+UFO_W;
+  }
+  if(ufo.active){
+    ufo.x+=ufo.dir*2.5;
+    if(ufo.x>W+UFO_W||ufo.x<-UFO_W) ufo.active=false;
+    for(let i=pBullets.length-1;i>=0;i--){
+      const b=pBullets[i];
+      if(b.x>ufo.x&&b.x<ufo.x+UFO_W&&b.y>ufo.y&&b.y<ufo.y+UFO_H){
+        const pts=UFO_PTS[Math.floor(Math.random()*UFO_PTS.length)];
+        score+=pts; if(score>hi)hi=score;
+        ufoMsg={text:'+'+pts,x:ufo.x+UFO_W/2,y:ufo.y,life:70};
+        addSpark(ufo.x+UFO_W/2,ufo.y+UFO_H/2,'#cc88ff');
+        ufo.active=false; pBullets.splice(i,1); break;
+      }
+    }
+  }
+  if(ufoMsg){ ufoMsg.life--; ufoMsg.y-=0.4; if(ufoMsg.life<=0)ufoMsg=null; }
+}
+
+function addSpark(cx,cy,color){
+  const parts=[];
+  for(let i=0;i<16;i++){
+    const a=(Math.PI*2*i)/16, sp=1.5+Math.random()*4;
+    parts.push({x:0,y:0,dx:Math.cos(a)*sp,dy:Math.sin(a)*sp});
+  }
+  sparks.push({cx,cy,color,life:28,max:28,parts});
+}
+
+function endGame(){ state='over'; }
+
+// ── DRAW ───────────────────────────────────────────────────────
+function draw(){
+  // Dark background with subtle grid — like the NFT app
+  ctx.fillStyle='#050a05';
+  ctx.fillRect(0,0,W,H);
+
+  // Subtle grid overlay matching patternretrieval.app aesthetic
+  ctx.strokeStyle='rgba(0,80,20,0.13)';
+  ctx.lineWidth=1;
+  for(let x=0;x<W;x+=B){ ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke(); }
+  for(let y=0;y<H;y+=B){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke(); }
+
+  // Scanlines
+  for(let y=0;y<H;y+=4){ ctx.fillStyle='rgba(0,0,0,0.12)'; ctx.fillRect(0,y,W,2); }
+
+  // HUD
+  ctx.shadowColor='#00ff50'; ctx.shadowBlur=8;
+  ctx.fillStyle='#00ff50'; ctx.font='bold 13px monospace';
+  ctx.textAlign='left';   ctx.fillText('SCORE<1> '+String(score).padStart(4,'0'), 8, 20);
+  ctx.textAlign='center'; ctx.fillText('HI-SCORE '+String(hi).padStart(4,'0'), W/2, 20);
+  ctx.textAlign='right';  ctx.fillText('SCORE<2> 0000', W-8, 20);
+  ctx.shadowBlur=0;
+
+  // Ground line
+  ctx.strokeStyle='#00cc44'; ctx.lineWidth=2;
+  ctx.shadowColor='#00ff44'; ctx.shadowBlur=6;
+  ctx.beginPath(); ctx.moveTo(0,H-52); ctx.lineTo(W,H-52); ctx.stroke();
+  ctx.shadowBlur=0;
+
+  // Lives
+  ctx.fillStyle='#00cc44'; ctx.font='13px monospace'; ctx.textAlign='left';
+  ctx.fillText(String(lives), 8, H-20);
+  for(let i=0;i<lives;i++) drawGlow(SPR_SHIP, 26+i*(PW+6), H-46, '#ffee00','#ffaa00', B-2);
+  ctx.textAlign='right'; ctx.fillText('CREDIT 00', W-8, H-20);
+
+  // ── TITLE ──────────────────────────────────────────────────
+  if(state==='title'){
+    ctx.fillStyle='rgba(0,8,2,0.92)'; ctx.fillRect(0,36,W,H-80);
+
+    ctx.fillStyle='#00ff50'; ctx.font='bold 32px monospace'; ctx.textAlign='center';
+    ctx.shadowColor='#00ff50'; ctx.shadowBlur=20;
+    ctx.fillText('PATTERN INVADERS', W/2, 88); ctx.shadowBlur=0;
+
+    ctx.fillStyle='#007733'; ctx.font='13px monospace';
+    ctx.fillText('— SCORE ADVANCE TABLE —', W/2, 116);
+
+    // % enemy
+    const ex = W/2 - 180;
+    drawGlow(SPR_PERCENT_A, ex, 132, '#ff4444','#ff1100');
+    ctx.fillStyle='#ff4444'; ctx.textAlign='left'; ctx.font='16px monospace';
+    ctx.fillText('= 20 PTS  (RED)', ex+EW+10, 132+EH/2+4);
+
+    // $ enemy
+    drawGlow(SPR_DOLLAR_A, ex, 132+EH+18, '#44ff88','#00ffaa');
+    ctx.fillStyle='#44ff88';
+    ctx.fillText('= 10 PTS  (GREEN)', ex+EW+10, 132+EH+18+EH/2+4);
+
+    // ? UFO
+    drawGlow(SPR_QUESTION_A, ex, 132+EH*2+36, '#cc88ff','#8844ff', UFO_B);
+    ctx.fillStyle='#cc88ff';
+    ctx.fillText('= ??? PTS (UFO)', ex+UFO_W+10, 132+EH*2+36+UFO_H/2+4);
+
+    // Ship
+    const sy = 132+EH*3+60;
+    ctx.shadowColor='#ffcc00'; ctx.shadowBlur=20;
+    drawSpr(SPR_SHIP, W/2-PW/2, sy, '#ffee00');
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#ffee00'; ctx.textAlign='center'; ctx.font='16px monospace';
+    ctx.fillText('= YOUR SHIP', W/2, sy+PH+18);
+
+    ctx.fillStyle='#005522'; ctx.font='13px monospace';
+    ctx.fillText('← →  MOVE          SPACE  FIRE', W/2, sy+PH+44);
+
+    if(Math.floor(tick/28)%2===0){
+      ctx.fillStyle='#00ff50'; ctx.font='20px monospace';
+      ctx.shadowColor='#00ff50'; ctx.shadowBlur=12;
+      ctx.fillText('PRESS SPACE TO PLAY', W/2, sy+PH+76);
+      ctx.shadowBlur=0;
+    }
+    return;
+  }
+
+  // ── ENEMIES ────────────────────────────────────────────────
+  enemies.forEach(e=>{
+    if(!e.alive) return;
+    if(e.wave===1){
+      if(e.isTop){
+        drawGlow(e.anim===0?SPR_PERCENT_A:SPR_PERCENT_B, e.x, e.y, '#ff4444','#ff1100');
+      } else {
+        drawGlow(e.anim===0?SPR_DOLLAR_A:SPR_DOLLAR_B, e.x, e.y, '#44ff88','#00ffaa');
+      }
+    } else if(e.wave===2){
+      if(e.isTop){
+        drawGlow(e.anim===0?SPR_SEVEN_A:SPR_SEVEN_B, e.x, e.y, '#cc88ff','#9955ff');
+      } else {
+        drawGlow(e.anim===0?SPR_FOUR_A:SPR_FOUR_B, e.x, e.y, '#bb77ff','#7733ff');
+      }
+    } else if(e.wave===3){
+      if(e.isTop){
+        drawGlow(e.anim===0?SPR_N_A:SPR_N_B, e.x, e.y, '#ff9922','#ff6600');
+      } else {
+        drawGlow(e.anim===0?SPR_W_A:SPR_W_B, e.x, e.y, '#ffaa33','#ff7700');
+      }
+    } else {
+      // Wave 4: white B (top) + white 8 (bottom)
+      if(e.isTop){
+        drawGlow(e.anim===0?SPR_B_A:SPR_B_B, e.x, e.y, '#e8e8ff','#aaaadd');
+      } else {
+        drawGlow(e.anim===0?SPR_8_A:SPR_8_B, e.x, e.y, '#ffffff','#ccccee');
+      }
+    }
+  });
+
+  // ── UFO ────────────────────────────────────────────────────
+  if(ufo.active){
+    drawGlow(Math.floor(tick/20)%2===0?SPR_QUESTION_A:SPR_QUESTION_B,
+      ufo.x, ufo.y, '#cc88ff','#8844ff', UFO_B);
+  }
+  if(ufoMsg){
+    const t=ufoMsg.life/70;
+    ctx.globalAlpha=t;
+    ctx.fillStyle='#cc88ff'; ctx.font='bold 13px monospace'; ctx.textAlign='center';
+    ctx.shadowColor='#8844ff'; ctx.shadowBlur=10;
+    ctx.fillText(ufoMsg.text, ufoMsg.x, ufoMsg.y);
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+  }
+
+  // ── PLAYER SHIP ────────────────────────────────────────────
+  if(state==='playing' && (iframes===0||Math.floor(tick/5)%2===0)){
+    ctx.shadowColor='#ffdd00';
+    ctx.shadowBlur=24;
+    drawSpr(SPR_SHIP, px, PLAYER_Y, '#ffee00');
+    ctx.shadowBlur=0;
+  }
+
+  // Player bullet
+  ctx.fillStyle='#ffffff';
+  ctx.shadowColor='#aaffaa'; ctx.shadowBlur=10;
+  pBullets.forEach(b=>ctx.fillRect(b.x, b.y, 3, 16));
+  ctx.shadowBlur=0;
+
+  // Enemy bullets
+  eBullets.forEach(b=>{
+    const col = b.waveNum===4 ? '#e8e8ff' : b.waveNum===3 ? '#ff9922' : b.waveNum===2 ? '#cc88ff' : (b.isTop?'#ff5533':'#44ff88');
+    ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=8;
+    const zz=Math.floor(b.y/6)%2===0?0:3;
+    ctx.fillRect(b.x+zz, b.y, 3, 9);
+    ctx.shadowBlur=0;
+  });
+
+  // Sparks
+  sparks.forEach(sp=>{
+    const t=sp.life/sp.max;
+    ctx.globalAlpha=t; ctx.fillStyle=sp.color;
+    ctx.shadowColor=sp.color; ctx.shadowBlur=14;
+    sp.parts.forEach(p=>ctx.fillRect(sp.cx+p.x-2,sp.cy+p.y-2,4,4));
+    ctx.globalAlpha=1; ctx.shadowBlur=0;
+  });
+
+  // Wave banner
+  if(tick<100){
+    ctx.fillStyle='#00ff50'; ctx.textAlign='center'; ctx.font='26px monospace';
+    ctx.shadowColor='#00ff50'; ctx.shadowBlur=14;
+    ctx.fillText('WAVE '+wave, W/2, H/2);
+    ctx.shadowBlur=0;
+  }
+
+  // ── GAME OVER ──────────────────────────────────────────────
+  if(state==='over'){
+    ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#ff3333'; ctx.textAlign='center'; ctx.font='bold 46px monospace';
+    ctx.shadowColor='#ff0000'; ctx.shadowBlur=24;
+    ctx.fillText('GAME OVER', W/2, H/2-28); ctx.shadowBlur=0;
+    ctx.fillStyle='#00ff50'; ctx.font='22px monospace';
+    ctx.fillText('SCORE: '+String(score).padStart(4,'0'), W/2, H/2+22);
+    if(Math.floor(tick/30)%2===0){
+      ctx.fillStyle='#ff9999'; ctx.font='18px monospace';
+      ctx.fillText('PRESS SPACE TO RETRY', W/2, H/2+62);
+    }
+  }
+}
+
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+loop();
+</script>
+
+<!-- Touch Controls -->
+<div id="touch-controls" style="
+  position:fixed; bottom:0; left:0; right:0;
+  display:flex; justify-content:space-between; align-items:center;
+  padding:12px 20px 20px;
+  background:linear-gradient(transparent, rgba(0,0,0,0.85));
+  user-select:none; -webkit-user-select:none;
+  touch-action:none;
+">
+  <!-- LEFT button -->
+  <button id="btn-left" style="
+    width:80px; height:80px; border-radius:50%;
+    background:rgba(0,200,60,0.15); border:2px solid #00cc44;
+    color:#00ff50; font-size:32px; line-height:1;
+    box-shadow:0 0 12px rgba(0,255,80,0.3);
+    cursor:pointer; -webkit-tap-highlight-color:transparent;
+  ">◀</button>
+
+  <!-- FIRE button -->
+  <button id="btn-fire" style="
+    width:90px; height:90px; border-radius:50%;
+    background:rgba(255,220,0,0.15); border:2px solid #ffcc00;
+    color:#ffee00; font-size:15px; font-weight:bold; letter-spacing:1px;
+    box-shadow:0 0 16px rgba(255,200,0,0.4);
+    cursor:pointer; -webkit-tap-highlight-color:transparent;
+  ">FIRE</button>
+
+  <!-- RIGHT button -->
+  <button id="btn-right" style="
+    width:80px; height:80px; border-radius:50%;
+    background:rgba(0,200,60,0.15); border:2px solid #00cc44;
+    color:#00ff50; font-size:32px; line-height:1;
+    box-shadow:0 0 12px rgba(0,255,80,0.3);
+    cursor:pointer; -webkit-tap-highlight-color:transparent;
+  ">▶</button>
+</div>
+
+<script>
+// ── TOUCH CONTROL WIRING ──────────────────────────────────────
+const btnLeft  = document.getElementById('btn-left');
+const btnRight = document.getElementById('btn-right');
+const btnFire  = document.getElementById('btn-fire');
+
+// Prevent default touch behavior (scrolling etc)
+[btnLeft, btnRight, btnFire].forEach(btn => {
+  btn.addEventListener('touchstart', e => e.preventDefault(), {passive:false});
+  btn.addEventListener('touchend',   e => e.preventDefault(), {passive:false});
+});
+
+// LEFT — hold to move
+btnLeft.addEventListener('touchstart', () => { keys['ArrowLeft'] = true; });
+btnLeft.addEventListener('touchend',   () => { keys['ArrowLeft'] = false; });
+btnLeft.addEventListener('mousedown',  () => { keys['ArrowLeft'] = true; });
+btnLeft.addEventListener('mouseup',    () => { keys['ArrowLeft'] = false; });
+
+// RIGHT — hold to move
+btnRight.addEventListener('touchstart', () => { keys['ArrowRight'] = true; });
+btnRight.addEventListener('touchend',   () => { keys['ArrowRight'] = false; });
+btnRight.addEventListener('mousedown',  () => { keys['ArrowRight'] = true; });
+btnRight.addEventListener('mouseup',    () => { keys['ArrowRight'] = false; });
+
+// FIRE — tap to shoot / start game
+btnFire.addEventListener('touchstart', () => {
+  if(state === 'title' || state === 'over'){
+    startGame();
+  } else {
+    const now = Date.now();
+    if(now - lastShot > 420){
+      lastShot = now;
+      pBullets.push({x: px + PW/2 - 2, y: PLAYER_Y - 4});
+    }
+  }
+});
+btnFire.addEventListener('click', () => {
+  if(state === 'title' || state === 'over'){
+    startGame();
+  } else {
+    const now = Date.now();
+    if(now - lastShot > 420){
+      lastShot = now;
+      pBullets.push({x: px + PW/2 - 2, y: PLAYER_Y - 4});
+    }
+  }
+});
+
+// Hide touch controls on desktop, show on touch devices
+function checkDevice(){
+  const isMobile = window.matchMedia('(max-width: 900px)').matches || navigator.maxTouchPoints > 0;
+  document.getElementById('touch-controls').style.display = isMobile ? 'flex' : 'none';
+}
+checkDevice();
+window.addEventListener('resize', checkDevice);
+</script>
+</body>
+</html>
